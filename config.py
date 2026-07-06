@@ -21,6 +21,11 @@ CAMERA_PREVIEW_WIDTH = 320
 CAMERA_PREVIEW_HEIGHT = 240
 CAMERA_MARGIN = 18
 
+# MediaPipe Tasks (Python 3.13+) no incluye el modelo de pose dentro del
+# paquete. Este archivo se descarga una vez y queda local para correr offline.
+POSE_MODEL_PATH = "models/pose_landmarker_lite.task"
+POSE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
+
 # Calibracion
 CALIBRATION_SECONDS = 3.0
 MIN_VISIBILITY = 0.55

@@ -1,5 +1,6 @@
 from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 import time
 
 import cv2
@@ -19,14 +20,37 @@ class PoseState:
 
 class PoseDetector:
     def __init__(self):
-        self.mp_pose = mp.solutions.pose
-        self.mp_drawing = mp.solutions.drawing_utils
-        self.pose = self.mp_pose.Pose(
-            model_complexity=1,
-            min_detection_confidence=0.55,
-            min_tracking_confidence=0.55,
-            smooth_landmarks=True,
-        )
+        self.using_solutions = hasattr(mp, "solutions")
+        if self.using_solutions:
+            self.mp_pose = mp.solutions.pose
+            self.mp_drawing = mp.solutions.drawing_utils
+            self.pose = self.mp_pose.Pose(
+                model_complexity=1,
+                min_detection_confidence=0.55,
+                min_tracking_confidence=0.55,
+                smooth_landmarks=True,
+            )
+            self.connections = self.mp_pose.POSE_CONNECTIONS
+        else:
+            from mediapipe.tasks.python.core import base_options
+            from mediapipe.tasks.python.vision import pose_landmarker
+            from mediapipe.tasks.python.vision.core import vision_task_running_mode
+
+            model_path = Path(config.POSE_MODEL_PATH)
+            if not model_path.exists():
+                raise FileNotFoundError(
+                    f"No existe {config.POSE_MODEL_PATH}. Descargalo desde {config.POSE_MODEL_URL}"
+                )
+            options = pose_landmarker.PoseLandmarkerOptions(
+                base_options=base_options.BaseOptions(model_asset_path=str(model_path)),
+                running_mode=vision_task_running_mode.VisionTaskRunningMode.IMAGE,
+                num_poses=1,
+                min_pose_detection_confidence=0.55,
+                min_pose_presence_confidence=0.55,
+                min_tracking_confidence=0.55,
+            )
+            self.pose = pose_landmarker.PoseLandmarker.create_from_options(options)
+            self.connections = [(c.start, c.end) for c in pose_landmarker.PoseLandmarksConnections.POSE_LANDMARKS]
         self.baseline = None
         self.calibration_start = None
         self.calibration_samples = []
@@ -42,11 +66,15 @@ class PoseDetector:
 
     def process(self, frame_bgr):
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        rgb.flags.writeable = False
-        results = self.pose.process(rgb)
+        if self.using_solutions:
+            rgb.flags.writeable = False
+            results = self.pose.process(rgb)
+        else:
+            image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+            results = self.pose.detect(image)
         self.last_results = results
 
-        metrics = self._metrics(results.pose_landmarks)
+        metrics = self._metrics(self._landmarks_from_results(results))
         if self.baseline is None:
             return self._calibrate(metrics)
 
@@ -93,7 +121,8 @@ class PoseDetector:
 
     def draw_overlay(self, frame_bgr, state):
         image = frame_bgr.copy()
-        if self.last_results and self.last_results.pose_landmarks:
+        landmarks = self._landmarks_from_results(self.last_results)
+        if self.using_solutions and self.last_results and self.last_results.pose_landmarks:
             specs = self.mp_drawing.DrawingSpec(color=(0, 255, 255), thickness=2, circle_radius=3)
             conn = self.mp_drawing.DrawingSpec(color=(255, 80, 0), thickness=2)
             self.mp_drawing.draw_landmarks(
@@ -103,6 +132,16 @@ class PoseDetector:
                 landmark_drawing_spec=specs,
                 connection_drawing_spec=conn,
             )
+        elif landmarks:
+            h, w = image.shape[:2]
+            for start, end in self.connections:
+                a = landmarks[start]
+                b = landmarks[end]
+                if self._visible(a) and self._visible(b):
+                    cv2.line(image, (int(a.x * w), int(a.y * h)), (int(b.x * w), int(b.y * h)), (255, 80, 0), 2)
+            for lm in landmarks:
+                if self._visible(lm):
+                    cv2.circle(image, (int(lm.x * w), int(lm.y * h)), 4, (0, 255, 255), -1)
         color = (0, 220, 255) if state.label == "SALTANDO" else (255, 180, 0) if state.label == "AGACHADO" else (0, 255, 90)
         cv2.rectangle(image, (8, 8), (190, 48), (20, 20, 20), -1)
         cv2.putText(image, state.label, (18, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
@@ -133,9 +172,9 @@ class PoseDetector:
         if not landmarks:
             return None
 
-        lm = landmarks.landmark
+        lm = landmarks.landmark if hasattr(landmarks, "landmark") else landmarks
         needed = [11, 12, 23, 24, 25, 26, 27, 28]
-        if any(lm[i].visibility < config.MIN_VISIBILITY for i in needed):
+        if any(not self._visible(lm[i]) for i in needed):
             return None
 
         shoulder_y = (lm[11].y + lm[12].y) / 2
@@ -151,3 +190,21 @@ class PoseDetector:
             "torso": torso,
             "height": height,
         }
+
+    def _landmarks_from_results(self, results):
+        if not results:
+            return None
+        if self.using_solutions:
+            return results.pose_landmarks
+        if results.pose_landmarks:
+            return results.pose_landmarks[0]
+        return None
+
+    def _visible(self, landmark):
+        visibility = getattr(landmark, "visibility", None)
+        presence = getattr(landmark, "presence", None)
+        if visibility is not None and visibility < config.MIN_VISIBILITY:
+            return False
+        if presence is not None and presence < config.MIN_VISIBILITY:
+            return False
+        return True
