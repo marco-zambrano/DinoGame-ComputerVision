@@ -28,6 +28,7 @@ POSE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarke
 
 # Calibracion
 CALIBRATION_SECONDS = 3.0
+INTRO_SECONDS = 7.0
 MIN_VISIBILITY = 0.55
 
 # Suavizado de pose. Subir a 5-7 si hay jitter; bajar a 2-3 si se siente lento.
