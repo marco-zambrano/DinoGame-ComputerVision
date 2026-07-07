@@ -58,6 +58,9 @@ DINO_WIDTH = 72
 DINO_HEIGHT = 78
 DINO_DUCK_WIDTH = 96
 DINO_DUCK_HEIGHT = 45
+# Ajuste visual: mueve el sprite hacia abajo respecto al hitbox para que los pies
+# toquen GROUND_Y (el contorno del sprite incluye padding de glow transparente).
+DINO_VISUAL_GROUND_OFFSET = 12
 GRAVITY = 2400.0
 JUMP_VELOCITY = -920.0
 START_SPEED = 430.0

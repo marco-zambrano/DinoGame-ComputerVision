@@ -98,8 +98,11 @@ class Dino:
             bob = 0
         else:
             sprite = self.run_sprites[int(self.step_timer * 14) % len(self.run_sprites)]
-            bob = -2 if self.on_ground and int(self.step_timer * 14) % 2 == 0 else 0
-        surface.blit(sprite, (r.x - 18, r.bottom - sprite.get_height() - 6 + bob))
+            bob = -1 if self.on_ground and int(self.step_timer * 14) % 2 == 0 else 0
+        surface.blit(
+            sprite,
+            (r.x - 18, r.bottom - sprite.get_height() + config.DINO_VISUAL_GROUND_OFFSET + bob),
+        )
 
     def _make_surface(self, width, height):
         return pygame.Surface((width * PIXEL, height * PIXEL), pygame.SRCALPHA)
