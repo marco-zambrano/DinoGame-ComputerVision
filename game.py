@@ -9,6 +9,10 @@ import config
 PIXEL = 3
 GROUND_HEIGHT = config.WINDOW_HEIGHT - config.GROUND_Y
 PANEL_WIDTH = 128
+OUTLINE = (8, 16, 24)
+DINO_FILL = (88, 190, 112)
+DINO_DARK = (20, 56, 42)
+PIXEL_SHADOW = (40, 54, 90)
 
 
 @dataclass
@@ -46,6 +50,10 @@ def _draw_neon_circle(surface, color, center, radius):
     pygame.draw.circle(surface, color, center, radius)
 
 
+def _scale_pixel(surface, scale):
+    return pygame.transform.scale(surface, (surface.get_width() * scale, surface.get_height() * scale))
+
+
 class Dino:
     def __init__(self):
         self.y = config.GROUND_Y - config.DINO_HEIGHT
@@ -53,8 +61,8 @@ class Dino:
         self.ducking = False
         self.on_ground = True
         self.step_timer = 0.0
-        self.run_sprites = (self._make_run_sprite(0), self._make_run_sprite(1))
-        self.duck_sprites = (self._make_duck_sprite(0), self._make_duck_sprite(1))
+        self.run_sprites = tuple(self._make_run_sprite(i) for i in range(4))
+        self.duck_sprites = tuple(self._make_duck_sprite(i) for i in range(2))
 
     @property
     def rect(self):
@@ -87,90 +95,75 @@ class Dino:
         r = self.rect
         if self.ducking and self.on_ground:
             sprite = self.duck_sprites[int(self.step_timer * 12) % 2]
+            bob = 0
         else:
-            sprite = self.run_sprites[int(self.step_timer * 12) % 2]
-        surface.blit(sprite, (r.x - 10, r.bottom - sprite.get_height() - 8))
+            sprite = self.run_sprites[int(self.step_timer * 14) % len(self.run_sprites)]
+            bob = -2 if self.on_ground and int(self.step_timer * 14) % 2 == 0 else 0
+        surface.blit(sprite, (r.x - 18, r.bottom - sprite.get_height() - 6 + bob))
 
     def _make_surface(self, width, height):
         return pygame.Surface((width * PIXEL, height * PIXEL), pygame.SRCALPHA)
 
-    def _px(self, surface, x, y, w=1, h=1, color=config.NEON_DINO):
+    def _px(self, surface, x, y, w=1, h=1, color=DINO_FILL):
         pygame.draw.rect(surface, color, (x * PIXEL, y * PIXEL, w * PIXEL, h * PIXEL))
 
     def _make_run_sprite(self, frame):
-        mask = self._make_surface(24, 26)
-
-        self._px(mask, 0, 13, 4, 3)
-        self._px(mask, 2, 12, 4, 3)
-        self._px(mask, 4, 11, 4, 3)
-        self._px(mask, 6, 10, 4, 3)
-        self._px(mask, 7, 10, 9, 9)
-        self._px(mask, 9, 8, 7, 4)
-        self._px(mask, 11, 17, 5, 3)
-        self._px(mask, 14, 7, 3, 7)
-        self._px(mask, 15, 3, 8, 8)
-        self._px(mask, 18, 8, 6, 3)
-        self._px(mask, 18, 11, 4, 1)
-        self._px(mask, 21, 5, 2, 2)
-        self._px(mask, 19, 7, 4, 1, (0, 0, 0, 0))
-        self._px(mask, 15, 14, 3, 1)
-        self._px(mask, 17, 15, 1, 2)
-
-        if frame == 0:
-            self._px(mask, 9, 19, 3, 5)
-            self._px(mask, 8, 24, 4, 2)
-            self._px(mask, 14, 19, 3, 4)
-            self._px(mask, 15, 23, 2, 2)
-        else:
-            self._px(mask, 9, 19, 3, 4)
-            self._px(mask, 9, 23, 2, 2)
-            self._px(mask, 14, 19, 3, 5)
-            self._px(mask, 13, 24, 4, 2)
-
-        return self._with_sprite_glow(mask, (20 * PIXEL, 5 * PIXEL), 92)
+        mask = self._make_surface(29, 30)
+        self._draw_trex(mask, frame, duck=False)
+        return self._with_sprite_glow(mask, (23 * PIXEL, 6 * PIXEL), mask.get_height())
 
     def _make_duck_sprite(self, frame):
-        mask = self._make_surface(32, 15)
+        mask = self._make_surface(35, 17)
+        self._draw_trex(mask, frame, duck=True)
+        return self._with_sprite_glow(mask, (28 * PIXEL, 4 * PIXEL), mask.get_height())
 
-        self._px(mask, 0, 8, 5, 2)
-        self._px(mask, 3, 7, 6, 2)
-        self._px(mask, 7, 6, 12, 5)
-        self._px(mask, 10, 10, 8, 2)
-        self._px(mask, 17, 5, 4, 5)
-        self._px(mask, 20, 3, 9, 6)
-        self._px(mask, 24, 7, 8, 2)
-        self._px(mask, 27, 4, 2, 2)
-        self._px(mask, 25, 6, 5, 1, (0, 0, 0, 0))
-        self._px(mask, 18, 10, 3, 1)
-        self._px(mask, 20, 11, 1, 1)
-
-        if frame == 0:
-            self._px(mask, 10, 12, 3, 3)
-            self._px(mask, 9, 14, 4, 1)
-            self._px(mask, 17, 12, 3, 2)
-            self._px(mask, 18, 14, 3, 1)
+    def _draw_trex(self, mask, frame, duck):
+        if duck:
+            fill_rects = [
+                (1, 9, 7, 2), (5, 8, 7, 2), (9, 7, 12, 5), (13, 11, 9, 2),
+                (20, 5, 5, 6), (24, 3, 9, 6), (29, 7, 6, 2), (31, 4, 2, 2),
+                (20, 11, 4, 1), (22, 12, 1, 1),
+            ]
+            legs_a = [(12, 13, 3, 3), (11, 16, 4, 1), (20, 13, 3, 2), (21, 16, 3, 1)]
+            legs_b = [(12, 13, 3, 2), (12, 16, 3, 1), (20, 13, 3, 3), (19, 16, 4, 1)]
         else:
-            self._px(mask, 10, 12, 3, 2)
-            self._px(mask, 10, 14, 3, 1)
-            self._px(mask, 17, 12, 3, 3)
-            self._px(mask, 16, 14, 4, 1)
+            fill_rects = [
+                (0, 15, 4, 2), (2, 14, 5, 3), (4, 13, 6, 3), (7, 12, 5, 3),
+                (9, 11, 9, 9), (11, 9, 8, 4), (13, 18, 5, 3), (17, 8, 3, 7),
+                (18, 4, 8, 8), (21, 9, 7, 3), (21, 12, 5, 1), (25, 6, 2, 2),
+                (18, 15, 3, 1), (20, 16, 1, 2),
+            ]
+            legs = [
+                [(11, 20, 3, 5), (10, 25, 4, 2), (17, 20, 3, 3), (18, 23, 2, 2)],
+                [(11, 20, 3, 4), (11, 24, 2, 2), (17, 20, 3, 5), (16, 25, 4, 2)],
+                [(10, 20, 3, 3), (9, 23, 3, 2), (17, 20, 3, 5), (18, 25, 3, 2)],
+                [(11, 20, 3, 5), (12, 25, 3, 2), (18, 20, 3, 3), (19, 23, 3, 2)],
+            ]
+            fill_rects += legs[frame % 4]
 
-        return self._with_sprite_glow(mask, (26 * PIXEL, 4 * PIXEL), 51)
+        if duck:
+            fill_rects += legs_a if frame == 0 else legs_b
+
+        for x, y, w, h in fill_rects:
+            self._px(mask, x - 1, y, w + 2, h, OUTLINE)
+            self._px(mask, x, y - 1, w, h + 2, OUTLINE)
+        for rect in fill_rects:
+            self._px(mask, *rect)
+
+        mouth = (24, 6, 5, 1) if duck else (22, 8, 5, 1)
+        self._px(mask, *mouth, color=OUTLINE)
+        self._px(mask, 23 if not duck else 28, 6 if not duck else 4, 1, 1, color=(230, 255, 235))
+        self._px(mask, 10 if not duck else 15, 19 if not duck else 12, 2, 2, color=DINO_DARK)
 
     def _with_sprite_glow(self, mask, eye_pos, height):
         pad = 10
         sprite = pygame.Surface((mask.get_width() + pad * 2, height + pad * 2), pygame.SRCALPHA)
-        for radius, alpha in ((8, 32), (5, 54), (3, 88)):
+        for radius, alpha in ((10, 30), (6, 52), (3, 86)):
             glow = mask.copy()
-            glow.fill(_rgba(config.NEON_DINO, alpha), special_flags=pygame.BLEND_RGBA_MULT)
+            glow.fill(_rgba(config.NEON_GREEN, alpha), special_flags=pygame.BLEND_RGBA_MULT)
             for dx, dy in ((-radius, 0), (radius, 0), (0, -radius), (0, radius), (-radius, -radius), (radius, radius)):
                 sprite.blit(glow, (pad + dx, pad + dy))
-        core = mask.copy()
-        core.fill((*config.NEON_DINO, 220), special_flags=pygame.BLEND_RGBA_MULT)
-        sprite.blit(core, (pad, pad))
-        highlight = mask.copy()
-        highlight.fill((*config.NEON_DINO_CORE, 120), special_flags=pygame.BLEND_RGBA_MULT)
-        sprite.blit(highlight, (pad, pad))
+        sprite.blit(mask, (pad, pad))
         _draw_neon_circle(sprite, (255, 255, 255), (pad + eye_pos[0], pad + eye_pos[1]), 2)
         return sprite
 
@@ -303,19 +296,50 @@ class Game:
         surface.blit(overlay, (0, 0))
 
     def _make_cloud_sprite(self, variant):
-        sprite = pygame.Surface((190, 96), pygame.SRCALPHA)
-        shapes = [
-            [(48, 48, 25), (78, 38, 33), (113, 44, 29), (139, 54, 22)],
-            [(38, 56, 21), (69, 44, 28), (99, 39, 35), (132, 51, 28), (154, 58, 18)],
-            [(54, 54, 28), (90, 42, 36), (129, 49, 25), (151, 59, 20)],
+        patterns = [
+            [
+                "000000111100000000000",
+                "000011222211100000000",
+                "001122222222111000000",
+                "011222222222222110000",
+                "112222122222222211100",
+                "222221111222222222110",
+                "022111001112222211110",
+                "001100000011111100000",
+            ],
+            [
+                "0000000111100000000000",
+                "0000011222211000000000",
+                "0001122222222111000000",
+                "0112222221222221110000",
+                "1122222111112222211100",
+                "0222111000011122222110",
+                "0011000000000111111000",
+            ],
+            [
+                "00000111100000000000",
+                "00011222211100000000",
+                "01122222222111000000",
+                "11222221122222111000",
+                "22222110011222221110",
+                "01111000000111111000",
+            ],
         ][variant]
-        for grow, alpha in ((16, 26), (10, 42), (5, 62)):
-            for cx, cy, radius in shapes:
-                pygame.draw.circle(sprite, _rgba(config.CYBER_CLOUD_GLOW, alpha), (cx, cy), radius + grow)
-        for cx, cy, radius in shapes:
-            pygame.draw.circle(sprite, config.CYBER_CLOUD, (cx, cy), radius)
-        for cx, cy, radius in shapes[:2]:
-            pygame.draw.circle(sprite, _rgba(config.CYBER_CLOUD_HIGHLIGHT, 190), (cx - 6, cy - 6), max(8, radius // 2))
+        palette = {
+            "1": (142, 181, 215, 210),
+            "2": (*config.CYBER_CLOUD, 230),
+        }
+        low = pygame.Surface((max(len(row) for row in patterns), len(patterns)), pygame.SRCALPHA)
+        for y, row in enumerate(patterns):
+            for x, value in enumerate(row):
+                if value in palette:
+                    low.set_at((x, y), palette[value])
+        sprite = pygame.Surface((low.get_width() * 9 + 24, low.get_height() * 9 + 18), pygame.SRCALPHA)
+        glow = _scale_pixel(low, 9)
+        glow.fill(_rgba(config.CYBER_CLOUD_GLOW, 70), special_flags=pygame.BLEND_RGBA_MULT)
+        for dx, dy in ((-8, 0), (8, 0), (0, -6), (0, 6)):
+            sprite.blit(glow, (12 + dx, 9 + dy))
+        sprite.blit(_scale_pixel(low, 9), (12, 9))
         return sprite
 
     def _draw_clouds(self, surface):
@@ -328,20 +352,25 @@ class Game:
             px = x - int(self.ground_phase)
             panel_color = config.CIRCUIT_PANEL_COLOR if (x // PANEL_WIDTH) % 2 == 0 else config.CIRCUIT_PANEL_ALT
             pygame.draw.rect(floor, panel_color, (px, 0, PANEL_WIDTH - 3, GROUND_HEIGHT))
-            pygame.draw.rect(floor, (20, 18, 38), (px, 0, PANEL_WIDTH - 3, GROUND_HEIGHT), 2)
+            pygame.draw.rect(floor, (16, 15, 36), (px, 0, PANEL_WIDTH - 3, GROUND_HEIGHT), 3)
+            pygame.draw.rect(floor, PIXEL_SHADOW, (px + 8, 12, PANEL_WIDTH - 19, 12))
+            pygame.draw.rect(floor, (27, 31, 60), (px + 16, 76, PANEL_WIDTH - 34, 18))
+            pygame.draw.rect(floor, (22, 24, 49), (px + 28, GROUND_HEIGHT - 28, 28, 18))
 
-            y_mid = 36 + ((x // PANEL_WIDTH) % 3) * 12
-            points = [(px + 8, y_mid), (px + 34, y_mid), (px + 34, y_mid + 22), (px + 82, y_mid + 22), (px + 82, y_mid - 8), (px + 118, y_mid - 8)]
+            y_mid = 35 + ((x // PANEL_WIDTH) % 3) * 10
+            points = [(px + 6, y_mid), (px + 32, y_mid), (px + 32, y_mid + 20), (px + 72, y_mid + 20), (px + 72, y_mid - 10), (px + 119, y_mid - 10)]
             for start, end in zip(points, points[1:]):
-                _draw_neon_line(floor, config.CIRCUIT_LINE, start, end, 2)
+                _draw_neon_line(floor, config.CIRCUIT_LINE, start, end, 3)
             for point in points[1:-1]:
                 _draw_neon_circle(floor, config.CIRCUIT_LINE, point, 3)
 
             accent = config.CIRCUIT_MAGENTA if (x // PANEL_WIDTH) % 3 == 0 else config.CIRCUIT_GREEN
-            _draw_neon_line(floor, accent, (px + 24, 92), (px + 56, 92), 2)
-            _draw_neon_circle(floor, accent, (px + 64, 92), 3)
+            _draw_neon_line(floor, accent, (px + 18, 103), (px + 38, 103), 3)
+            for led_x in (px + 78, px + 88, px + 98):
+                pygame.draw.rect(floor, accent, (led_x, GROUND_HEIGHT - 23, 5, 5))
         surface.blit(floor, (0, config.GROUND_Y))
-        _draw_neon_line(surface, config.CIRCUIT_LINE, (0, config.GROUND_Y), (config.WINDOW_WIDTH, config.GROUND_Y), 2)
+        pygame.draw.line(surface, OUTLINE, (0, config.GROUND_Y - 1), (config.WINDOW_WIDTH, config.GROUND_Y - 1), 4)
+        _draw_neon_line(surface, config.CIRCUIT_LINE, (0, config.GROUND_Y + 15), (config.WINDOW_WIDTH, config.GROUND_Y + 15), 3)
 
     def _draw_obstacle(self, surface, obstacle):
         if obstacle.kind == "computer":
@@ -354,30 +383,38 @@ class Game:
     def _draw_cactus(self, surface, r):
         fill = pygame.Surface((r.w + 34, r.h + 34), pygame.SRCALPHA)
         offset = 17
-        body = pygame.Rect(offset + 12, offset, max(14, r.w - 24), r.h)
-        left = pygame.Rect(offset, offset + r.h // 3, 18, r.h // 2)
-        right = pygame.Rect(offset + r.w - 18, offset + r.h // 4, 18, r.h // 2)
+        body = pygame.Rect(offset + r.w // 2 - 9, offset, 18, r.h)
+        left = pygame.Rect(offset + 2, offset + r.h // 3, 18, r.h // 2)
+        right = pygame.Rect(offset + r.w - 20, offset + r.h // 4, 18, r.h // 2)
         for shape in (body, left, right):
-            pygame.draw.rect(fill, (7, 42, 39, 135), shape, border_radius=8)
-            _draw_neon_rect(fill, shape, config.NEON_CYAN, 2, 8)
+            pygame.draw.rect(fill, OUTLINE, shape.inflate(6, 6))
+            pygame.draw.rect(fill, (36, 174, 125, 185), shape)
+            pygame.draw.rect(fill, config.NEON_CYAN, shape, 3)
+            _draw_neon_rect(fill, shape, config.NEON_CYAN, 2)
         surface.blit(fill, (r.x - offset, r.y - offset))
 
     def _draw_computer(self, surface, r):
         flicker = 150 + int((self.score * 18) % 70)
         pad = 16
         layer = pygame.Surface((r.w + pad * 2, r.h + pad * 2), pygame.SRCALPHA)
-        monitor = pygame.Rect(pad + 4, pad, r.w - 8, 44)
-        screen = pygame.Rect(pad + 12, pad + 8, r.w - 24, 24)
-        stand = pygame.Rect(pad + 29, pad + 44, 14, 10)
-        base = pygame.Rect(pad + 16, pad + 54, r.w - 32, 10)
-        tower = pygame.Rect(pad + 7, pad + 58, r.w - 14, 20)
-        for rect in (monitor, stand, base, tower):
-            pygame.draw.rect(layer, config.CRT_BODY, rect, border_radius=3)
-            pygame.draw.rect(layer, config.CRT_DARK, rect, 2, border_radius=3)
-        pygame.draw.rect(layer, _rgba(config.CRT_SCREEN, flicker), screen, border_radius=2)
-        _draw_neon_rect(layer, screen, config.CRT_SCREEN, 2, 2)
+        monitor = pygame.Rect(pad + 3, pad + 2, r.w - 6, 45)
+        screen = pygame.Rect(pad + 13, pad + 11, r.w - 26, 25)
+        stand = pygame.Rect(pad + 29, pad + 47, 14, 9)
+        case = pygame.Rect(pad + 8, pad + 55, r.w - 16, 20)
+        keyboard = pygame.Rect(pad + 4, pad + 75, r.w + 22, 11)
+        side = pygame.Rect(pad - 5, pad + 11, 12, 55)
+        for rect, color in ((side, (76, 73, 126)), (monitor, (188, 194, 214)), (stand, (132, 137, 165)), (case, (160, 166, 190)), (keyboard, (215, 218, 226))):
+            pygame.draw.rect(layer, OUTLINE, rect.inflate(6, 6))
+            pygame.draw.rect(layer, color, rect)
+            pygame.draw.rect(layer, (89, 94, 136), rect, 3)
+        pygame.draw.rect(layer, _rgba(config.CRT_SCREEN, flicker), screen)
+        pygame.draw.rect(layer, OUTLINE, screen, 3)
+        _draw_neon_rect(layer, screen, config.CRT_SCREEN, 2)
         _draw_neon_line(layer, config.CRT_SCREEN, (screen.x + 7, screen.y + 14), (screen.x + 24, screen.y + 14), 2)
-        _draw_neon_circle(layer, config.CIRCUIT_MAGENTA, (tower.right - 12, tower.y + 10), 3)
+        pygame.draw.rect(layer, config.CIRCUIT_GREEN, (case.x + 13, case.y + 10, 5, 5))
+        pygame.draw.rect(layer, config.CIRCUIT_GREEN, (case.x + 23, case.y + 10, 5, 5))
+        for i in range(7):
+            pygame.draw.rect(layer, (125, 129, 158), (keyboard.x + 10 + i * 8, keyboard.y + 3, 5, 4))
         surface.blit(layer, (r.x - pad, r.y - pad))
 
     def _draw_drone(self, surface, r):
