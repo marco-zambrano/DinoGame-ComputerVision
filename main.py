@@ -6,9 +6,11 @@ import pygame
 
 import config
 from game import Game
+from leaderboard import Leaderboard
 from pose_detector import PoseDetector, PoseState
 
 
+ENTER_NAME = "enter_name"
 INTRO = "intro"
 CALIBRATING = "calibrating"
 PLAYING = "playing"
@@ -99,6 +101,46 @@ def draw_intro(screen, frame_bgr, game, font, big_font, seconds_left):
     screen.blit(prompt, prompt.get_rect(center=prompt_rect.center))
 
 
+def draw_enter_name(screen, player_name, font, big_font):
+    shade = pygame.Surface((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), pygame.SRCALPHA)
+    shade.fill((8, 12, 24, 220))
+    screen.blit(shade, (0, 0))
+    title = big_font.render("INGRESA TU NOMBRE", True, config.HUD_TEXT)
+    screen.blit(title, title.get_rect(center=(config.WINDOW_WIDTH // 2, 220)))
+    display_name = (player_name + "█") if len(player_name) < 15 else player_name[:15]
+    text = big_font.render(display_name, True, config.NEON_CYAN)
+    screen.blit(text, text.get_rect(center=(config.WINDOW_WIDTH // 2, 310)))
+    hint = font.render("Letras, numeros, espacio  |  ENTER para confirmar", True, config.NEON_GREEN)
+    screen.blit(hint, hint.get_rect(center=(config.WINDOW_WIDTH // 2, 380)))
+    if not player_name:
+        empty = font.render("(vacio = JUGADOR)", True, (140, 140, 140))
+        screen.blit(empty, empty.get_rect(center=(config.WINDOW_WIDTH // 2, 345)))
+
+
+def draw_leaderboard_overlay(screen, leaderboard, font, big_font):
+    shade = pygame.Surface((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), pygame.SRCALPHA)
+    shade.fill((5, 8, 18, 210))
+    screen.blit(shade, (0, 0))
+    title = big_font.render("LEADERBOARD", True, config.NEON_CYAN)
+    screen.blit(title, title.get_rect(center=(config.WINDOW_WIDTH // 2, 80)))
+    entries = leaderboard.get_top()
+    if not entries:
+        msg = font.render("Todavia no hay scores registrados", True, (140, 140, 140))
+        screen.blit(msg, msg.get_rect(center=(config.WINDOW_WIDTH // 2, 300)))
+    else:
+        header = font.render(f"{'#':>3}  {'NOMBRE':<18}  {'SCORE':>6}", True, config.NEON_GREEN)
+        screen.blit(header, header.get_rect(center=(config.WINDOW_WIDTH // 2, 140)))
+        pygame.draw.line(screen, config.CIRCUIT_LINE, (config.WINDOW_WIDTH // 2 - 220, 170), (config.WINDOW_WIDTH // 2 + 220, 170), 2)
+        y = 200
+        for i, (name, score, _) in enumerate(entries):
+            color = config.NEON_DINO if i == 0 else config.HUD_TEXT
+            line = font.render(f"{i+1:>3}  {name:<18}  {score:>6}", True, color)
+            screen.blit(line, line.get_rect(midleft=(config.WINDOW_WIDTH // 2 - 220, y)))
+            y += 42
+    prompt = font.render("Presiona cualquier tecla para cerrar", True, (120, 120, 140))
+    screen.blit(prompt, prompt.get_rect(center=(config.WINDOW_WIDTH // 2, config.WINDOW_HEIGHT - 60)))
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((config.WINDOW_WIDTH, config.WINDOW_HEIGHT))
@@ -117,9 +159,13 @@ def main():
 
     detector = PoseDetector()
     game = Game(font, big_font)
+    leaderboard = Leaderboard()
     state = PoseState()
     last_frame = None
-    app_state = INTRO
+    player_name = ""
+    score_saved = False
+    show_leaderboard = False
+    app_state = ENTER_NAME
     intro_start = time.time()
 
     try:
@@ -130,10 +176,29 @@ def main():
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
-                    if event.key in (pygame.K_SPACE, pygame.K_UP):
+                    if app_state == ENTER_NAME:
+                        if event.key == pygame.K_RETURN:
+                            app_state = INTRO
+                            intro_start = time.time()
+                        elif event.key == pygame.K_BACKSPACE:
+                            player_name = player_name[:-1]
+                        elif event.key == pygame.K_SPACE and len(player_name) < 15:
+                            player_name += " "
+                        elif event.unicode and event.unicode.isprintable() and len(player_name) < 15:
+                            player_name += event.unicode
+                    elif show_leaderboard:
+                        show_leaderboard = False
+                    elif event.key == pygame.K_l and app_state == INTRO:
+                        show_leaderboard = True
+                    elif event.key in (pygame.K_SPACE, pygame.K_UP):
                         if app_state == INTRO:
                             app_state = CALIBRATING
-                        else:
+                        elif app_state == PLAYING and (game.game_over or game.victory):
+                            score_saved = False
+                            player_name = ""
+                            game.reset()
+                            app_state = ENTER_NAME
+                        elif app_state == PLAYING:
                             game.handle_jump()
                     elif event.key in (pygame.K_ESCAPE, pygame.K_q):
                         running = False
@@ -157,8 +222,15 @@ def main():
                 game.handle_jump()
             if app_state == PLAYING:
                 game.update(dt, state.ducking)
+                if game.game_over or game.victory:
+                    if not score_saved:
+                        leaderboard.add_score(player_name, int(game.score))
+                        score_saved = True
+                        show_leaderboard = True
 
-            if app_state == INTRO:
+            if app_state == ENTER_NAME:
+                draw_enter_name(screen, player_name, font, big_font)
+            elif app_state == INTRO:
                 seconds_left = config.INTRO_SECONDS - (time.time() - intro_start)
                 draw_intro(screen, last_frame, game, font, big_font, seconds_left)
             else:
@@ -168,9 +240,13 @@ def main():
                 if app_state == CALIBRATING:
                     draw_calibration(screen, state, big_font)
 
+            if show_leaderboard:
+                draw_leaderboard_overlay(screen, leaderboard, font, big_font)
+
             pygame.display.flip()
     finally:
         detector.close()
+        leaderboard.close()
         cap.release()
         pygame.quit()
     return 0
