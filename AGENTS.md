@@ -1,65 +1,49 @@
-# Repository Guidelines
+# Skeleton Runner / CYBER-RUN
 
-## Project Structure & Module Organization
+Single-window Python game controlled by body pose via webcam.
 
-This repository contains a single-window Python game, **Skeleton Runner / CYBER-RUN**.
+## Entrypoints & Structure
 
-- `main.py`: application entry point, Pygame loop, camera setup, intro screen, calibration flow, and integration between pose input and gameplay.
-- `pose_detector.py`: MediaPipe Pose / Tasks integration, calibration baseline, jump and duck detection.
-- `game.py`: runner game state, drawing, obstacles, collisions, score, and CYBER-RUN visual theme.
-- `config.py`: tunable constants for camera, pose thresholds, gameplay, and visual colors.
-- `models/`: local MediaPipe model assets, including `pose_landmarker_lite.task`.
-- `requirements.txt`: Python dependencies.
+- `main.py` — Pygame loop, camera init, 3-state machine: `INTRO` → `CALIBRATING` → `PLAYING`
+- `pose_detector.py` — MediaPipe pose, calibration baseline, jump/duck detection
+- `game.py` — Runner state, rendering, obstacles, collisions, score, cyberpunk visuals
+- `config.py` — All tunable constants: camera, pose thresholds, physics, colors
+- `models/pose_landmarker_lite.task` — MediaPipe model (required, not auto-downloaded)
+- `assets/dino/*.png` — Optional sprites; if missing, fallback to procedural pixel-art (no error)
 
-There is currently no dedicated `tests/` directory.
+## MediaPipe Quirk (key gotcha)
 
-## Build, Test, and Development Commands
+Python 3.13+ **lacks** `mp.solutions`. On 3.13 the code falls through to the MediaPipe Tasks API (`pose_landmarker.PoseLandmarker`) which requires `models/pose_landmarker_lite.task` on disk. On older Python the `solutions` path is used instead. Both paths work — the code detects at import time via `hasattr(mp, "solutions")`.
 
-Create and activate the virtual environment:
+If the model file is missing the app raises `FileNotFoundError` pointing to the download URL in `config.POSE_MODEL_URL`.
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-Install dependencies:
+## Commands
 
 ```powershell
+.\.venv\Scripts\Activate.ps1         # activate venv
 python -m pip install -r requirements.txt
+python main.py                        # run game (requires webcam)
+python -m py_compile main.py game.py pose_detector.py config.py  # syntax check
 ```
 
-Run the game:
+No test framework, CI, or codegen is configured.
 
-```powershell
-python main.py
-```
+## Conventions
 
-Check syntax before committing:
+- `UPPER_SNAKE_CASE` for constants (in `config.py`), `snake_case` for functions/vars, descriptive class names
+- 4-space indentation, standard Python style
+- All tuning values in `config.py` — no magic numbers in game/detection logic
+- `config.py` has extensive inline tuning comments (jump sensitivity, duck thresholds, smoothing); edit there first before touching detection logic
 
-```powershell
-python -m py_compile main.py game.py pose_detector.py config.py
-```
+## Testing
 
-## Coding Style & Naming Conventions
+- Syntax check with `py_compile` (above)
+- Pose changes must be verified manually with a camera — thresholds depend on lighting, distance, person height
+- Rendering-only changes: run the game and visually check
 
-Use standard Python style with 4-space indentation. Keep modules focused: pose logic belongs in `pose_detector.py`, game and rendering logic in `game.py`, and tunable values in `config.py`. Use `UPPER_SNAKE_CASE` for constants, `snake_case` for functions and variables, and descriptive class names such as `PoseDetector` or `Game`.
+## Config Tips
 
-Prefer clear constants in `config.py` over magic numbers in rendering or detection code.
-
-## Testing Guidelines
-
-No formal test suite is configured yet. At minimum, run `py_compile` after edits. For rendering-only changes, use a dummy Pygame smoke test when possible. For pose changes, verify manually with the camera because thresholds depend on lighting, distance, and participant height.
-
-## Commit & Pull Request Guidelines
-
-Git history uses short, imperative commit messages, for example:
-
-- `Add intro screen before calibration`
-- `Redesign runner with cyberpunk visuals`
-- `Support MediaPipe Tasks pose detection`
-
-Keep commits scoped to one concern. Pull requests should include a concise summary, manual test steps, screenshots or short video for visual changes, and notes about any changed pose thresholds or calibration behavior.
-
-## Configuration Tips
-
-When moving to a new room or event, adjust detection thresholds in `config.py` only after recalibrating in-app. If the camera index changes, update `CAMERA_INDEX`. Keep `models/pose_landmarker_lite.task` available so the app can run without downloading a model at startup.
+- After moving to a new room/event: recalibrate in-app, then tweak thresholds in `config.py`
+- Camera index → `config.CAMERA_INDEX`
+- Model file at `models/pose_landmarker_lite.task` — keep it present to avoid download failures
+- Score goal: `GOAL_SCORE = 250` to win (victory screen)
