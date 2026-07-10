@@ -17,16 +17,20 @@ class Leaderboard:
             "  date TEXT NOT NULL"
             ")"
         )
+        self._deduplicate()
         self._conn.commit()
 
     def add_score(self, name, score):
         name = name.strip() or "JUGADOR"
+        best = self.get_player_best(name)
+        if score <= best:
+            return
+        self._conn.execute("DELETE FROM scores WHERE name = ?", (name,))
         date = time.strftime("%Y-%m-%d %H:%M:%S")
         self._conn.execute(
             "INSERT INTO scores (name, score, date) VALUES (?, ?, ?)",
             (name, score, date),
         )
-        self._trim_excess()
         self._conn.commit()
 
     def get_top(self, limit=None):
@@ -53,11 +57,13 @@ class Leaderboard:
     def close(self):
         self._conn.close()
 
-    def _trim_excess(self):
+    def _deduplicate(self):
         self._conn.execute(
             "DELETE FROM scores WHERE id NOT IN ("
-            "  SELECT id FROM scores ORDER BY score DESC, date ASC"
-            "  LIMIT ?"
-            ")",
-            (config.LEADERBOARD_MAX_ENTRIES,),
+            "  SELECT id FROM ("
+            "    SELECT id, ROW_NUMBER() OVER ("
+            "      PARTITION BY name ORDER BY score DESC, id ASC"
+            "    ) AS rn FROM scores"
+            "  ) WHERE rn = 1"
+            ")"
         )

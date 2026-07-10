@@ -538,13 +538,15 @@ class Game:
         title_text = "NUEVO RECORD" if self.record_break else "SYSTEM HALTED"
         accent = config.CIRCUIT_GREEN if self.record_break else config.CIRCUIT_MAGENTA
         title = self.big_font.render(title_text, True, config.HUD_TEXT)
+        score_text = self.font.render(f"PUNTAJE: {int(self.score)}", True, config.HUD_TEXT)
         prompt = self.font.render("Salta o presiona ESPACIO para reiniciar", True, config.NEON_CYAN)
-        panel = pygame.Surface((620, 150), pygame.SRCALPHA)
+        panel = pygame.Surface((620, 180), pygame.SRCALPHA)
         pygame.draw.rect(panel, (12, 14, 24, 190), panel.get_rect(), border_radius=6)
         _draw_neon_rect(panel, panel.get_rect().inflate(-4, -4), accent, 2, 6)
         surface.blit(panel, panel.get_rect(center=(center_x, 315)))
-        surface.blit(title, title.get_rect(center=(center_x, 290)))
-        surface.blit(prompt, prompt.get_rect(center=(center_x, 340)))
+        surface.blit(title, title.get_rect(center=(center_x, 280)))
+        surface.blit(score_text, score_text.get_rect(center=(center_x, 320)))
+        surface.blit(prompt, prompt.get_rect(center=(center_x, 365)))
 
     def _draw_victory(self, surface):
         center_x = (config.WINDOW_WIDTH - config.CAMERA_PREVIEW_WIDTH - config.CAMERA_MARGIN * 3) // 2
