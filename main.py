@@ -237,8 +237,6 @@ def main():
                         elif app_state == PLAYING and (game.game_over or game.victory):
                             score_saved = False
                             game.reset()
-                            app_state = INTRO
-                            intro_start = time.time()
                         elif app_state == PLAYING:
                             game.handle_jump()
                     elif event.key in (pygame.K_ESCAPE, pygame.K_q):
@@ -259,9 +257,9 @@ def main():
             if app_state == CALIBRATING and state.calibrated:
                 app_state = PLAYING
 
-            if app_state == PLAYING and state.jump_event:
+            if app_state == PLAYING and state.jump_event and not show_leaderboard:
                 game.handle_jump()
-            if app_state == PLAYING:
+            if app_state == PLAYING and not show_leaderboard:
                 game.update(dt, state.ducking)
                 if game.game_over or game.victory:
                     if not score_saved:
@@ -278,6 +276,13 @@ def main():
                 draw_intro(screen, last_frame, game, font, big_font, seconds_left)
             else:
                 game.draw(screen)
+                if player_name:
+                    label = font.render(f"{player_name}", True, config.NEON_DINO)
+                    label_rect = label.get_rect(bottomright=(config.WINDOW_WIDTH - 22, config.WINDOW_HEIGHT - 22))
+                    bg = pygame.Surface(label_rect.inflate(16, 8).size, pygame.SRCALPHA)
+                    pygame.draw.rect(bg, (8, 16, 28, 180), bg.get_rect(), border_radius=4)
+                    screen.blit(bg, label_rect.inflate(16, 8).topleft)
+                    screen.blit(label, label_rect)
                 if last_frame is not None:
                     draw_camera_preview(screen, last_frame, state, detector, font)
                 if app_state == CALIBRATING:
