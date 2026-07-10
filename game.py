@@ -1,5 +1,6 @@
 import random
 from dataclasses import dataclass
+from pathlib import Path
 
 import pygame
 
@@ -13,6 +14,7 @@ OUTLINE = (8, 16, 24)
 DINO_FILL = (88, 190, 112)
 DINO_DARK = (20, 56, 42)
 PIXEL_SHADOW = (40, 54, 90)
+ASSET_DIR = Path(__file__).resolve().parent / "assets" / "dino"
 
 
 @dataclass
@@ -61,8 +63,16 @@ class Dino:
         self.ducking = False
         self.on_ground = True
         self.step_timer = 0.0
-        self.run_sprites = tuple(self._make_run_sprite(i) for i in range(4))
-        self.duck_sprites = tuple(self._make_duck_sprite(i) for i in range(2))
+        self.air_timer = 0.0
+        self.land_timer = 0.0
+        self.run_sprites = self._load_sprite_set("run", 4, config.DINO_HEIGHT + 34)
+        self.duck_sprites = self._load_sprite_set("duck", 2, config.DINO_DUCK_HEIGHT + 28)
+        self.goal_sprites = self._load_named_sprites(("goal_1.png", "goal_2.png", "goal_3.png"), config.DINO_HEIGHT + 52)
+        self.goal_meme_sprite = self._load_sprite("goal_meme.png", config.DINO_HEIGHT + 48)
+        self.lose_sprites = self._load_named_sprites(("lose_1.png", "lose_2.png", "lose_3.png"), config.DINO_HEIGHT + 48)
+        self.jump_prepare_sprite = self._load_sprite("jump_prepare.png", config.DINO_HEIGHT + 22)
+        self.jump_sprite = self._load_sprite("jump.png", config.DINO_HEIGHT + 34)
+        self.land_sprite = self._load_sprite("land.png", config.DINO_DUCK_HEIGHT + 42)
 
     @property
     def rect(self):
@@ -76,10 +86,13 @@ class Dino:
             self.vy = config.JUMP_VELOCITY
             self.on_ground = False
             self.ducking = False
+            self.air_timer = 0.0
+            self.land_timer = 0.0
 
     def update(self, dt, ducking):
         self.ducking = ducking and self.on_ground
         if not self.on_ground:
+            self.air_timer += dt
             self.vy += config.GRAVITY * dt
             self.y += self.vy * dt
             floor_y = config.GROUND_Y - config.DINO_HEIGHT
@@ -87,14 +100,35 @@ class Dino:
                 self.y = floor_y
                 self.vy = 0.0
                 self.on_ground = True
+                self.land_timer = 0.18
         else:
             self.y = config.GROUND_Y - config.DINO_HEIGHT
+            self.land_timer = max(0.0, self.land_timer - dt)
         self.step_timer += dt
 
-    def draw(self, surface):
+    def draw(self, surface, celebrating=False, dying=False):
         r = self.rect
-        if self.ducking and self.on_ground:
+        if celebrating and self.goal_sprites:
+            sprite = self.goal_sprites[int(self.step_timer * 4) % len(self.goal_sprites)]
+            bob = -2 if int(self.step_timer * 8) % 2 == 0 else 0
+        elif celebrating and self.goal_meme_sprite is not None:
+            sprite = self.goal_meme_sprite
+            bob = 0
+        elif dying and self.lose_sprites:
+            frame = min(len(self.lose_sprites) - 1, int(self.step_timer * 3))
+            sprite = self.lose_sprites[frame]
+            bob = 0
+        elif self.land_timer > 0.0 and self.land_sprite is not None:
+            sprite = self.land_sprite
+            bob = 0
+        elif self.ducking and self.on_ground:
             sprite = self.duck_sprites[int(self.step_timer * 12) % 2]
+            bob = 0
+        elif not self.on_ground and self.air_timer < 0.14 and self.jump_prepare_sprite is not None:
+            sprite = self.jump_prepare_sprite
+            bob = 0
+        elif not self.on_ground and self.jump_sprite is not None:
+            sprite = self.jump_sprite
             bob = 0
         else:
             sprite = self.run_sprites[int(self.step_timer * 14) % len(self.run_sprites)]
@@ -103,6 +137,38 @@ class Dino:
             sprite,
             (r.x - 18, r.bottom - sprite.get_height() + config.DINO_VISUAL_GROUND_OFFSET + bob),
         )
+
+    def _load_named_sprites(self, filenames, target_height):
+        return tuple(
+            sprite
+            for filename in filenames
+            if (sprite := self._load_sprite(filename, target_height)) is not None
+        )
+
+    def _load_sprite_set(self, prefix, count, target_height):
+        sprites = tuple(
+            sprite
+            for i in range(1, count + 1)
+            if (sprite := self._load_sprite(f"{prefix}_{i}.png", target_height)) is not None
+        )
+        if len(sprites) == count:
+            return sprites
+        if prefix == "run":
+            return tuple(self._make_run_sprite(i) for i in range(4))
+        return tuple(self._make_duck_sprite(i) for i in range(2))
+
+    def _load_sprite(self, filename, target_height):
+        path = ASSET_DIR / filename
+        if not path.exists():
+            return None
+        sprite = pygame.image.load(str(path)).convert_alpha()
+        return self._scale_sprite(sprite, target_height)
+
+    def _scale_sprite(self, sprite, target_height):
+        scale = target_height / sprite.get_height()
+        width = max(1, int(sprite.get_width() * scale))
+        height = max(1, int(sprite.get_height() * scale))
+        return pygame.transform.scale(sprite, (width, height))
 
     def _make_surface(self, width, height):
         return pygame.Surface((width * PIXEL, height * PIXEL), pygame.SRCALPHA)
@@ -187,8 +253,12 @@ class Game:
         self.obstacles = []
         self.speed = config.START_SPEED
         self.score = 0
+        self.previous_high_score = self.high_score
         self.distance_to_next = random.randint(config.OBSTACLE_MIN_GAP, config.OBSTACLE_MAX_GAP)
         self.game_over = False
+        self.record_break = False
+        self.victory = False
+        self.victory_timer = 0.0
         self.ground_phase = 0.0
         self.clouds = [
             [random.randint(0, config.WINDOW_WIDTH), random.randint(70, 230), random.randrange(len(self.cloud_variants))]
@@ -196,17 +266,31 @@ class Game:
         ]
 
     def handle_jump(self):
-        if self.game_over:
+        if self.game_over or self.victory:
             self.reset()
         else:
             self.dino.jump()
 
     def update(self, dt, ducking):
         if self.game_over:
+            self.dino.step_timer += dt
+            return
+        if self.victory:
+            self.victory_timer += dt
+            self.ground_phase = (self.ground_phase + self.speed * 0.25 * dt) % PANEL_WIDTH
+            self.dino.update(dt, False)
             return
         self.speed = min(config.MAX_SPEED, self.speed + config.SPEED_GAIN_PER_SECOND * dt)
         self.score += config.SCORE_RATE * dt
         self.high_score = max(self.high_score, int(self.score))
+        if self.score >= config.GOAL_SCORE:
+            self.score = config.GOAL_SCORE
+            self.high_score = max(self.high_score, int(self.score))
+            self.victory = True
+            self.victory_timer = 0.0
+            self.dino.step_timer = 0.0
+            self.obstacles.clear()
+            return
         self.ground_phase = (self.ground_phase + self.speed * dt) % PANEL_WIDTH
         self.dino.update(dt, ducking)
 
@@ -237,6 +321,8 @@ class Game:
         dino_hitbox = self.dino.rect.inflate(-10, -8)
         if any(dino_hitbox.colliderect(o.rect.inflate(-6, -6)) for o in self.obstacles):
             self.game_over = True
+            self.record_break = int(self.score) > self.previous_high_score
+            self.dino.step_timer = 0.0
 
     def draw(self, surface):
         surface.blit(self.background, (0, 0))
@@ -245,9 +331,11 @@ class Game:
         self._draw_circuit_floor(surface)
         for obstacle in self.obstacles:
             self._draw_obstacle(surface, obstacle)
-        self.dino.draw(surface)
+        self.dino.draw(surface, celebrating=self.victory or self.record_break, dying=self.game_over and not self.record_break)
         self._draw_title_bar(surface)
         self._draw_score(surface)
+        if self.victory:
+            self._draw_victory(surface)
         if self.game_over:
             self._draw_game_over(surface)
 
@@ -440,7 +528,8 @@ class Game:
         score_text = f"HI: {self.high_score:05d} | SCORE: {int(self.score):05d}"
         text = self.font.render(score_text, True, config.HUD_TEXT)
         glow = self.font.render(score_text, True, config.NEON_CYAN)
-        x = config.WINDOW_WIDTH - text.get_width() - 24
+        camera_left = config.WINDOW_WIDTH - config.CAMERA_PREVIEW_WIDTH - config.CAMERA_MARGIN
+        x = camera_left - text.get_width() - 28
         y = 24
         for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
             glow.set_alpha(70)
@@ -458,14 +547,28 @@ class Game:
             pygame.draw.circle(surface, color, (bar.right - 76 + i * 24, bar.centery), 6)
 
     def _draw_game_over(self, surface):
-        title = self.big_font.render("SYSTEM HALTED", True, config.HUD_TEXT)
+        center_x = (config.WINDOW_WIDTH - config.CAMERA_PREVIEW_WIDTH - config.CAMERA_MARGIN * 3) // 2
+        title_text = "NUEVO RECORD" if self.record_break else "SYSTEM HALTED"
+        accent = config.CIRCUIT_GREEN if self.record_break else config.CIRCUIT_MAGENTA
+        title = self.big_font.render(title_text, True, config.HUD_TEXT)
         prompt = self.font.render("Salta o presiona ESPACIO para reiniciar", True, config.NEON_CYAN)
         panel = pygame.Surface((620, 150), pygame.SRCALPHA)
         pygame.draw.rect(panel, (12, 14, 24, 190), panel.get_rect(), border_radius=6)
-        _draw_neon_rect(panel, panel.get_rect().inflate(-4, -4), config.CIRCUIT_MAGENTA, 2, 6)
-        surface.blit(panel, panel.get_rect(center=(config.WINDOW_WIDTH // 2, 315)))
-        surface.blit(title, title.get_rect(center=(config.WINDOW_WIDTH // 2, 290)))
-        surface.blit(prompt, prompt.get_rect(center=(config.WINDOW_WIDTH // 2, 340)))
+        _draw_neon_rect(panel, panel.get_rect().inflate(-4, -4), accent, 2, 6)
+        surface.blit(panel, panel.get_rect(center=(center_x, 315)))
+        surface.blit(title, title.get_rect(center=(center_x, 290)))
+        surface.blit(prompt, prompt.get_rect(center=(center_x, 340)))
+
+    def _draw_victory(self, surface):
+        center_x = (config.WINDOW_WIDTH - config.CAMERA_PREVIEW_WIDTH - config.CAMERA_MARGIN * 3) // 2
+        title = self.big_font.render("META SUPERADA", True, config.HUD_TEXT)
+        prompt = self.font.render("Salta o presiona ESPACIO para jugar otra vez", True, config.NEON_CYAN)
+        panel = pygame.Surface((680, 150), pygame.SRCALPHA)
+        pygame.draw.rect(panel, (8, 18, 18, 170), panel.get_rect(), border_radius=6)
+        _draw_neon_rect(panel, panel.get_rect().inflate(-4, -4), config.CIRCUIT_GREEN, 2, 6)
+        surface.blit(panel, panel.get_rect(center=(center_x, 170)))
+        surface.blit(title, title.get_rect(center=(center_x, 145)))
+        surface.blit(prompt, prompt.get_rect(center=(center_x, 195)))
 
     def _lerp(self, a, b, t):
         return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))

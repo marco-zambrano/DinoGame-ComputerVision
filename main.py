@@ -45,43 +45,58 @@ def draw_calibration(screen, state, big_font):
 def draw_intro(screen, frame_bgr, game, font, big_font, seconds_left):
     game.draw(screen)
     shade = pygame.Surface((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), pygame.SRCALPHA)
-    shade.fill((5, 8, 18, 215))
+    shade.fill((5, 8, 18, 205))
     screen.blit(shade, (0, 0))
 
     title = big_font.render("CYBER-RUN", True, config.NEON_CYAN)
     glow = big_font.render("CYBER-RUN", True, config.NEON_GREEN)
-    center_x = config.WINDOW_WIDTH // 2
-    screen.blit(glow, glow.get_rect(center=(center_x - 2, 92)))
-    screen.blit(glow, glow.get_rect(center=(center_x + 2, 92)))
-    screen.blit(title, title.get_rect(center=(center_x, 92)))
+    left = pygame.Rect(54, 72, 560, 480)
+    right = pygame.Rect(680, 78, 520, 390)
 
-    lines = [
-        "Este juego usa la camara para detectar tu cuerpo en tiempo real.",
-        "Salta fisicamente para que el T-Rex salte.",
-        "Agachate para esquivar obstaculos altos.",
-        "Colocate frente a la camara con hombros, cadera, rodillas y tobillos visibles.",
-        "Cuando termine esta pantalla, quedate derecho durante la calibracion.",
+    pygame.draw.rect(screen, (10, 16, 26, 190), left, border_radius=8)
+    pygame.draw.rect(screen, config.CIRCUIT_MAGENTA, left, 2, border_radius=8)
+    pygame.draw.rect(screen, (10, 16, 26, 170), right, border_radius=8)
+    pygame.draw.rect(screen, config.NEON_CYAN, right, 2, border_radius=8)
+
+    screen.blit(glow, glow.get_rect(topleft=(left.x + 35, left.y + 24)))
+    screen.blit(title, title.get_rect(topleft=(left.x + 38, left.y + 24)))
+
+    steps = [
+        ("1", "Ponte frente a la camara"),
+        ("2", "Mantente visible de hombros a pies"),
+        ("3", "Salta para saltar en el juego"),
+        ("4", "Agachate para esquivar drones altos"),
+        ("5", "Despues viene una calibracion corta"),
     ]
-    y = 155
-    for line in lines:
+    y = left.y + 120
+    for number, line in steps:
+        pygame.draw.circle(screen, config.CIRCUIT_GREEN, (left.x + 54, y + 14), 16)
+        badge = font.render(number, True, (8, 18, 18))
+        screen.blit(badge, badge.get_rect(center=(left.x + 54, y + 14)))
         text = font.render(line, True, config.HUD_TEXT)
-        screen.blit(text, text.get_rect(center=(center_x, y)))
-        y += 34
+        screen.blit(text, (left.x + 86, y))
+        y += 58
 
     if frame_bgr is not None:
-        preview_w, preview_h = 420, 315
+        preview_w, preview_h = right.w - 36, right.h - 72
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         frame_rgb = cv2.resize(frame_rgb, (preview_w, preview_h))
         preview = pygame.surfarray.make_surface(frame_rgb.swapaxes(0, 1))
-        rect = pygame.Rect(0, 0, preview_w, preview_h)
-        rect.center = (center_x, 410)
-        pygame.draw.rect(screen, (12, 16, 28), rect.inflate(12, 12), border_radius=8)
-        pygame.draw.rect(screen, config.NEON_CYAN, rect.inflate(12, 12), 2, border_radius=8)
+        rect = pygame.Rect(right.x + 18, right.y + 52, preview_w, preview_h)
+        label = font.render("VISTA DE CAMARA", True, config.NEON_CYAN)
+        screen.blit(label, (right.x + 22, right.y + 16))
+        pygame.draw.rect(screen, (12, 16, 28), rect.inflate(8, 8), border_radius=6)
         screen.blit(preview, rect)
+    else:
+        label = font.render("Esperando camara...", True, config.NEON_CYAN)
+        screen.blit(label, label.get_rect(center=right.center))
 
     countdown = max(0, int(seconds_left) + 1)
-    prompt = font.render(f"Preparando calibracion en {countdown}s  |  ESPACIO para empezar ahora", True, config.NEON_GREEN)
-    screen.blit(prompt, prompt.get_rect(center=(center_x, config.WINDOW_HEIGHT - 58)))
+    prompt_rect = pygame.Rect(250, config.WINDOW_HEIGHT - 96, 780, 52)
+    pygame.draw.rect(screen, (8, 18, 18, 185), prompt_rect, border_radius=8)
+    pygame.draw.rect(screen, config.CIRCUIT_GREEN, prompt_rect, 2, border_radius=8)
+    prompt = font.render(f"Calibracion en {countdown}s  |  ESPACIO para empezar ahora", True, config.NEON_GREEN)
+    screen.blit(prompt, prompt.get_rect(center=prompt_rect.center))
 
 
 def main():

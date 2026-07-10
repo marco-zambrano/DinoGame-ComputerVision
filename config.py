@@ -69,6 +69,7 @@ SPEED_GAIN_PER_SECOND = 7.0
 OBSTACLE_MIN_GAP = 440
 OBSTACLE_MAX_GAP = 760
 SCORE_RATE = 11.0
+GOAL_SCORE = 250
 
 # Tema visual CYBER-RUN. Cambia estos tonos para rebrandear el escenario sin
 # tocar la logica del juego ni la deteccion de pose.
