@@ -225,7 +225,7 @@ def main():
                             app_state = ENTER_NAME
                         else:
                             show_leaderboard = False
-                    elif event.key == pygame.K_l and app_state == INTRO:
+                    elif event.key == pygame.K_l and (app_state == INTRO or (app_state == PLAYING and (game.game_over or game.victory))):
                         show_leaderboard = True
                     elif event.key == pygame.K_n and (app_state == INTRO or (app_state == PLAYING and (game.game_over or game.victory))):
                         player_name = ""
