@@ -275,22 +275,9 @@ class Game:
         if self.game_over:
             self.dino.step_timer += dt
             return
-        if self.victory:
-            self.victory_timer += dt
-            self.ground_phase = (self.ground_phase + self.speed * 0.25 * dt) % PANEL_WIDTH
-            self.dino.update(dt, False)
-            return
         self.speed = min(config.MAX_SPEED, self.speed + config.SPEED_GAIN_PER_SECOND * dt)
         self.score += config.SCORE_RATE * dt
         self.high_score = max(self.high_score, int(self.score))
-        if self.score >= config.GOAL_SCORE:
-            self.score = config.GOAL_SCORE
-            self.high_score = max(self.high_score, int(self.score))
-            self.victory = True
-            self.victory_timer = 0.0
-            self.dino.step_timer = 0.0
-            self.obstacles.clear()
-            return
         self.ground_phase = (self.ground_phase + self.speed * dt) % PANEL_WIDTH
         self.dino.update(dt, ducking)
 

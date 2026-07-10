@@ -225,16 +225,16 @@ def main():
                             app_state = ENTER_NAME
                         else:
                             show_leaderboard = False
-                    elif event.key == pygame.K_l and (app_state == INTRO or (app_state == PLAYING and (game.game_over or game.victory))):
+                    elif event.key == pygame.K_l and (app_state == INTRO or (app_state == PLAYING and game.game_over)):
                         show_leaderboard = True
-                    elif event.key == pygame.K_n and (app_state == INTRO or (app_state == PLAYING and (game.game_over or game.victory))):
+                    elif event.key == pygame.K_n and (app_state == INTRO or (app_state == PLAYING and game.game_over)):
                         player_name = ""
                         existing_score = 0
                         app_state = ENTER_NAME
                     elif event.key in (pygame.K_SPACE, pygame.K_UP):
                         if app_state == INTRO:
                             app_state = CALIBRATING
-                        elif app_state == PLAYING and (game.game_over or game.victory):
+                        elif app_state == PLAYING and game.game_over:
                             score_saved = False
                             game.reset()
                         elif app_state == PLAYING:
