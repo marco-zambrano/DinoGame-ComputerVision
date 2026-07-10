@@ -14,6 +14,7 @@ ENTER_NAME = "enter_name"
 INTRO = "intro"
 CALIBRATING = "calibrating"
 PLAYING = "playing"
+NAME_CONFIRM = "name_confirm"
 
 
 def camera_to_surface(frame_bgr):
@@ -141,6 +142,20 @@ def draw_leaderboard_overlay(screen, leaderboard, font, big_font):
     screen.blit(prompt, prompt.get_rect(center=(config.WINDOW_WIDTH // 2, config.WINDOW_HEIGHT - 60)))
 
 
+def draw_name_confirm(screen, player_name, existing_score, font, big_font):
+    shade = pygame.Surface((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), pygame.SRCALPHA)
+    shade.fill((8, 12, 24, 220))
+    screen.blit(shade, (0, 0))
+    title = big_font.render("JUGADOR EXISTENTE", True, config.CIRCUIT_MAGENTA)
+    screen.blit(title, title.get_rect(center=(config.WINDOW_WIDTH // 2, 200)))
+    msg = font.render(f"'{player_name}' ya existe  |  Mejor score: {existing_score}", True, config.HUD_TEXT)
+    screen.blit(msg, msg.get_rect(center=(config.WINDOW_WIDTH // 2, 270)))
+    opt1 = font.render("ESPACIO / ENTER  -  Continuar como este jugador", True, config.NEON_GREEN)
+    screen.blit(opt1, opt1.get_rect(center=(config.WINDOW_WIDTH // 2, 340)))
+    opt2 = font.render("N / BACKSPACE  -  Elegir otro nombre", True, config.NEON_CYAN)
+    screen.blit(opt2, opt2.get_rect(center=(config.WINDOW_WIDTH // 2, 390)))
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((config.WINDOW_WIDTH, config.WINDOW_HEIGHT))
@@ -163,6 +178,7 @@ def main():
     state = PoseState()
     last_frame = None
     player_name = ""
+    existing_score = 0
     score_saved = False
     show_leaderboard = False
     app_state = ENTER_NAME
@@ -178,26 +194,51 @@ def main():
                 elif event.type == pygame.KEYDOWN:
                     if app_state == ENTER_NAME:
                         if event.key == pygame.K_RETURN:
-                            app_state = INTRO
-                            intro_start = time.time()
+                            if not player_name.strip():
+                                player_name = "JUGADOR"
+                            best = leaderboard.get_player_best(player_name)
+                            if best > 0:
+                                existing_score = best
+                                app_state = NAME_CONFIRM
+                            else:
+                                app_state = INTRO
+                                intro_start = time.time()
                         elif event.key == pygame.K_BACKSPACE:
                             player_name = player_name[:-1]
                         elif event.key == pygame.K_SPACE and len(player_name) < 15:
                             player_name += " "
                         elif event.unicode and event.unicode.isprintable() and len(player_name) < 15:
                             player_name += event.unicode
+                    elif app_state == NAME_CONFIRM:
+                        if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                            app_state = INTRO
+                            intro_start = time.time()
+                        elif event.key in (pygame.K_n, pygame.K_BACKSPACE):
+                            player_name = ""
+                            existing_score = 0
+                            app_state = ENTER_NAME
                     elif show_leaderboard:
-                        show_leaderboard = False
+                        if event.key == pygame.K_n and player_name:
+                            show_leaderboard = False
+                            player_name = ""
+                            existing_score = 0
+                            app_state = ENTER_NAME
+                        else:
+                            show_leaderboard = False
                     elif event.key == pygame.K_l and app_state == INTRO:
                         show_leaderboard = True
+                    elif event.key == pygame.K_n and (app_state == INTRO or (app_state == PLAYING and (game.game_over or game.victory))):
+                        player_name = ""
+                        existing_score = 0
+                        app_state = ENTER_NAME
                     elif event.key in (pygame.K_SPACE, pygame.K_UP):
                         if app_state == INTRO:
                             app_state = CALIBRATING
                         elif app_state == PLAYING and (game.game_over or game.victory):
                             score_saved = False
-                            player_name = ""
                             game.reset()
-                            app_state = ENTER_NAME
+                            app_state = INTRO
+                            intro_start = time.time()
                         elif app_state == PLAYING:
                             game.handle_jump()
                     elif event.key in (pygame.K_ESCAPE, pygame.K_q):
@@ -230,6 +271,8 @@ def main():
 
             if app_state == ENTER_NAME:
                 draw_enter_name(screen, player_name, font, big_font)
+            elif app_state == NAME_CONFIRM:
+                draw_name_confirm(screen, player_name, existing_score, font, big_font)
             elif app_state == INTRO:
                 seconds_left = config.INTRO_SECONDS - (time.time() - intro_start)
                 draw_intro(screen, last_frame, game, font, big_font, seconds_left)
