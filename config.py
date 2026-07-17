@@ -14,12 +14,16 @@ GAME_AREA_WIDTH = WINDOW_WIDTH
 GAME_AREA_HEIGHT = WINDOW_HEIGHT
 
 # Camara
-CAMERA_INDEX = 0
+CAMERA_INDEX = 1
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
 CAMERA_PREVIEW_WIDTH = 320
 CAMERA_PREVIEW_HEIGHT = 240
 CAMERA_MARGIN = 18
+
+# Audio
+MUSIC_PATH = "assets/audio/background.mp3"
+MUSIC_VOLUME = 0.45
 
 # MediaPipe Tasks (Python 3.13+) no incluye el modelo de pose dentro del
 # paquete. Este archivo se descarga una vez y queda local para correr offline.
@@ -28,6 +32,7 @@ POSE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarke
 
 # Calibracion
 CALIBRATION_SECONDS = 3.0
+CALIBRATION_MIN_SAMPLES = 24
 INTRO_SECONDS = 7.0
 MIN_VISIBILITY = 0.55
 
@@ -38,18 +43,21 @@ POSE_SMOOTHING_FRAMES = 4
 # - Si no detecta saltos reales, baja JUMP_MIN_UPWARD_VELOCITY_RATIO o
 #   JUMP_MIN_RISE_RATIO.
 # - Si dispara saltos al moverse normal, sube esos valores o el cooldown.
-JUMP_LOOKBACK_FRAMES = 5
-JUMP_MIN_RISE_RATIO = 0.045
-JUMP_MIN_UPWARD_VELOCITY_RATIO = 0.018
-JUMP_COOLDOWN_MS = 450
+JUMP_LOOKBACK_FRAMES = 7
+JUMP_ARMING_MS = 900
+JUMP_MIN_RISE_RATIO = 0.065
+JUMP_MIN_UPWARD_VELOCITY_RATIO = 0.026
+JUMP_MIN_ABOVE_BASELINE_RATIO = 0.04
+JUMP_COOLDOWN_MS = 850
 
 # Agacharse:
 # - Si no detecta agacharse, baja DUCK_TORSO_REDUCTION_RATIO o
 #   DUCK_SHOULDER_DROP_RATIO.
 # - Si confunde salto con agacharse, sube DUCK_KNEE_STABILITY_RATIO.
-DUCK_TORSO_REDUCTION_RATIO = 0.25
-DUCK_SHOULDER_DROP_RATIO = 0.13
-DUCK_KNEE_STABILITY_RATIO = 0.08
+DUCK_TORSO_REDUCTION_RATIO = 0.17
+DUCK_SHOULDER_DROP_RATIO = 0.09
+DUCK_HIP_DROP_RATIO = 0.07
+DUCK_KNEE_STABILITY_RATIO = 0.18
 
 # Juego
 GROUND_Y = 600
@@ -61,15 +69,15 @@ DINO_DUCK_HEIGHT = 45
 # Ajuste visual: mueve el sprite hacia abajo respecto al hitbox para que los pies
 # toquen GROUND_Y (el contorno del sprite incluye padding de glow transparente).
 DINO_VISUAL_GROUND_OFFSET = 12
-GRAVITY = 2400.0
-JUMP_VELOCITY = -920.0
-START_SPEED = 430.0
-MAX_SPEED = 920.0
-SPEED_GAIN_PER_SECOND = 7.0
-OBSTACLE_MIN_GAP = 440
-OBSTACLE_MAX_GAP = 760
+GRAVITY = 2200.0
+JUMP_VELOCITY = -900.0
+START_SPEED = 360.0
+MAX_SPEED = 760.0
+SPEED_GAIN_PER_SECOND = 5.0
+OBSTACLE_MIN_GAP = 560
+OBSTACLE_MAX_GAP = 920
 SCORE_RATE = 11.0
-GOAL_SCORE = 250
+GOAL_SCORE = 750
 
 # Tema visual CYBER-RUN. Cambia estos tonos para rebrandear el escenario sin
 # tocar la logica del juego ni la deteccion de pose.

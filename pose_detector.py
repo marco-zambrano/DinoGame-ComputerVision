@@ -59,10 +59,21 @@ class PoseDetector:
         self.shoulder_history = deque(maxlen=config.POSE_SMOOTHING_FRAMES)
         self.knee_history = deque(maxlen=config.POSE_SMOOTHING_FRAMES)
         self.last_jump_ms = -99999
+        self.armed_at_ms = None
         self.last_results = None
 
     def close(self):
         self.pose.close()
+
+    def reset_calibration(self):
+        self.baseline = None
+        self.calibration_start = None
+        self.calibration_samples = []
+        self.hip_history.clear()
+        self.torso_history.clear()
+        self.shoulder_history.clear()
+        self.knee_history.clear()
+        self.armed_at_ms = None
 
     def process(self, frame_bgr):
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
@@ -79,9 +90,16 @@ class PoseDetector:
             return self._calibrate(metrics)
 
         if metrics is None:
+            self.hip_history.clear()
+            self.torso_history.clear()
+            self.shoulder_history.clear()
+            self.knee_history.clear()
+            self.armed_at_ms = None
             return PoseState(label="SIN POSE", calibrated=True)
 
         now_ms = int(time.time() * 1000)
+        if self.armed_at_ms is None:
+            self.armed_at_ms = now_ms
         self.hip_history.append(metrics["hip_y"])
         self.torso_history.append(metrics["torso"])
         self.shoulder_history.append(metrics["shoulder_y"])
@@ -93,9 +111,11 @@ class PoseDetector:
 
         torso_reduction = 1.0 - (avg_torso / self.baseline["torso"])
         shoulder_drop = (avg_shoulder - self.baseline["shoulder_y"]) / self.baseline["height"]
+        hip_drop = (metrics["hip_y"] - self.baseline["hip_y"]) / self.baseline["height"]
         knee_motion = abs(avg_knee - self.baseline["knee_y"]) / self.baseline["height"]
         ducking = (
             torso_reduction >= config.DUCK_TORSO_REDUCTION_RATIO
+            or hip_drop >= config.DUCK_HIP_DROP_RATIO
             or (
                 shoulder_drop >= config.DUCK_SHOULDER_DROP_RATIO
                 and knee_motion <= config.DUCK_KNEE_STABILITY_RATIO
@@ -103,15 +123,18 @@ class PoseDetector:
         )
 
         jump_event = False
-        if len(self.hip_history) >= 2 and not ducking:
+        armed = now_ms - self.armed_at_ms >= config.JUMP_ARMING_MS
+        if len(self.hip_history) == self.hip_history.maxlen and armed and not ducking:
             hip_delta = self.hip_history[-1] - self.hip_history[0]
             rise_ratio = -hip_delta / self.baseline["height"]
             velocity_ratio = -(self.hip_history[-1] - self.hip_history[-2]) / self.baseline["height"]
+            above_baseline = (self.baseline["hip_y"] - self.hip_history[-1]) / self.baseline["height"]
             cooled_down = now_ms - self.last_jump_ms >= config.JUMP_COOLDOWN_MS
             if (
                 cooled_down
                 and rise_ratio >= config.JUMP_MIN_RISE_RATIO
                 and velocity_ratio >= config.JUMP_MIN_UPWARD_VELOCITY_RATIO
+                and above_baseline >= config.JUMP_MIN_ABOVE_BASELINE_RATIO
             ):
                 jump_event = True
                 self.last_jump_ms = now_ms
@@ -156,7 +179,8 @@ class PoseDetector:
 
         elapsed = time.time() - self.calibration_start
         remaining = max(0.0, config.CALIBRATION_SECONDS - elapsed)
-        if elapsed >= config.CALIBRATION_SECONDS and self.calibration_samples:
+        enough_samples = len(self.calibration_samples) >= config.CALIBRATION_MIN_SAMPLES
+        if elapsed >= config.CALIBRATION_SECONDS and enough_samples:
             self.baseline = {
                 "shoulder_y": float(np.mean([m["shoulder_y"] for m in self.calibration_samples])),
                 "hip_y": float(np.mean([m["hip_y"] for m in self.calibration_samples])),
@@ -164,8 +188,17 @@ class PoseDetector:
                 "torso": float(np.mean([m["torso"] for m in self.calibration_samples])),
                 "height": float(np.mean([m["height"] for m in self.calibration_samples])),
             }
+            self.hip_history.clear()
+            self.torso_history.clear()
+            self.shoulder_history.clear()
+            self.knee_history.clear()
+            self.armed_at_ms = int(time.time() * 1000)
             return PoseState(label="DE PIE", calibrated=True)
 
+        if not self.calibration_samples:
+            return PoseState(label="BUSCANDO POSE", calibrated=False)
+        if not enough_samples:
+            return PoseState(label="QUEDATE QUIETO", calibrated=False)
         return PoseState(label=f"CALIBRANDO {int(np.ceil(remaining))}", calibrated=False)
 
     def _metrics(self, landmarks):

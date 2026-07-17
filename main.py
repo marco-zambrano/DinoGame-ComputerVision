@@ -1,5 +1,6 @@
 import sys
 import time
+from pathlib import Path
 
 import cv2
 import pygame
@@ -15,12 +16,92 @@ INTRO = "intro"
 CALIBRATING = "calibrating"
 PLAYING = "playing"
 NAME_CONFIRM = "name_confirm"
+FULLSCREEN_BUTTON = pygame.Rect(config.WINDOW_WIDTH - 62, 18, 44, 34)
+
+
+def open_camera():
+    candidates = [config.CAMERA_INDEX] + [i for i in range(5) if i != config.CAMERA_INDEX]
+    fallback_index = None
+    for index in candidates:
+        cap = cv2.VideoCapture(index)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+        if not cap.isOpened():
+            cap.release()
+            continue
+
+        ok, frame = cap.read()
+        if ok and frame is not None:
+            if frame.mean() > 8:
+                print(f"Camara activa: CAMERA_INDEX={index}")
+                return cap
+            fallback_index = fallback_index if fallback_index is not None else index
+        cap.release()
+
+    if fallback_index is not None:
+        cap = cv2.VideoCapture(fallback_index)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
+        if cap.isOpened():
+            print(f"Camara activa, pero imagen oscura: CAMERA_INDEX={fallback_index}")
+            return cap
+        cap.release()
+    return None
 
 
 def camera_to_surface(frame_bgr):
     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     frame_rgb = cv2.resize(frame_rgb, (config.CAMERA_PREVIEW_WIDTH, config.CAMERA_PREVIEW_HEIGHT))
     return pygame.surfarray.make_surface(frame_rgb.swapaxes(0, 1))
+
+
+def start_music():
+    music_path = Path(__file__).resolve().parent / config.MUSIC_PATH
+    if not music_path.exists():
+        return
+    try:
+        pygame.mixer.init()
+        pygame.mixer.music.load(str(music_path))
+        pygame.mixer.music.set_volume(config.MUSIC_VOLUME)
+        pygame.mixer.music.play(-1)
+    except pygame.error as exc:
+        print(f"No se pudo iniciar la musica: {exc}")
+
+
+def set_display(fullscreen):
+    flags = pygame.FULLSCREEN if fullscreen else 0
+    return pygame.display.set_mode((config.WINDOW_WIDTH, config.WINDOW_HEIGHT), flags)
+
+
+def draw_fullscreen_button(screen, font, fullscreen):
+    mouse_over = FULLSCREEN_BUTTON.collidepoint(pygame.mouse.get_pos())
+    fill = (12, 24, 36, 230) if mouse_over else (8, 16, 28, 210)
+    pygame.draw.rect(screen, fill, FULLSCREEN_BUTTON, border_radius=5)
+    pygame.draw.rect(screen, config.NEON_CYAN, FULLSCREEN_BUTTON, 2, border_radius=5)
+
+    x, y, w, h = FULLSCREEN_BUTTON
+    color = config.HUD_TEXT
+    if fullscreen:
+        corners = [
+            ((x + 12, y + 10), (x + 18, y + 10), (x + 12, y + 16)),
+            ((x + w - 12, y + 10), (x + w - 18, y + 10), (x + w - 12, y + 16)),
+            ((x + 12, y + h - 10), (x + 18, y + h - 10), (x + 12, y + h - 16)),
+            ((x + w - 12, y + h - 10), (x + w - 18, y + h - 10), (x + w - 12, y + h - 16)),
+        ]
+    else:
+        corners = [
+            ((x + 10, y + 8), (x + 18, y + 8), (x + 10, y + 16)),
+            ((x + w - 10, y + 8), (x + w - 18, y + 8), (x + w - 10, y + 16)),
+            ((x + 10, y + h - 8), (x + 18, y + h - 8), (x + 10, y + h - 16)),
+            ((x + w - 10, y + h - 8), (x + w - 18, y + h - 8), (x + w - 10, y + h - 16)),
+        ]
+    for a, b, c in corners:
+        pygame.draw.line(screen, color, a, b, 3)
+        pygame.draw.line(screen, color, a, c, 3)
+
+    if mouse_over:
+        label = font.render("F", True, config.NEON_GREEN)
+        screen.blit(label, label.get_rect(center=(x + w // 2, y + h + 16)))
 
 
 def draw_camera_preview(screen, frame_bgr, state, detector, font):
@@ -158,16 +239,16 @@ def draw_name_confirm(screen, player_name, existing_score, font, big_font):
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((config.WINDOW_WIDTH, config.WINDOW_HEIGHT))
+    start_music()
+    fullscreen = False
+    screen = set_display(fullscreen)
     pygame.display.set_caption("Skeleton Runner")
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("consolas", 24)
     big_font = pygame.font.SysFont("consolas", 52, bold=True)
 
-    cap = cv2.VideoCapture(config.CAMERA_INDEX)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.CAMERA_WIDTH)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.CAMERA_HEIGHT)
-    if not cap.isOpened():
+    cap = open_camera()
+    if cap is None:
         print("No se pudo abrir la camara. Revisa CAMERA_INDEX en config.py.")
         pygame.quit()
         return 1
@@ -191,8 +272,15 @@ def main():
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if FULLSCREEN_BUTTON.collidepoint(event.pos):
+                        fullscreen = not fullscreen
+                        screen = set_display(fullscreen)
                 elif event.type == pygame.KEYDOWN:
-                    if app_state == ENTER_NAME:
+                    if event.key == pygame.K_f:
+                        fullscreen = not fullscreen
+                        screen = set_display(fullscreen)
+                    elif app_state == ENTER_NAME:
                         if event.key == pygame.K_RETURN:
                             if not player_name.strip():
                                 player_name = "JUGADOR"
@@ -246,7 +334,7 @@ def main():
             if ok:
                 frame = cv2.flip(frame, 1)
                 last_frame = frame
-                if app_state != INTRO:
+                if app_state not in (ENTER_NAME, NAME_CONFIRM, INTRO):
                     state = detector.process(frame)
             else:
                 state = PoseState(label="SIN CAMARA", calibrated=True)
@@ -257,7 +345,7 @@ def main():
             if app_state == CALIBRATING and state.calibrated:
                 app_state = PLAYING
 
-            if app_state == PLAYING and state.jump_event and not show_leaderboard:
+            if app_state == PLAYING and state.jump_event and not show_leaderboard and not game.game_over and not game.victory:
                 game.handle_jump()
             if app_state == PLAYING and not show_leaderboard:
                 game.update(dt, state.ducking)
@@ -291,11 +379,14 @@ def main():
             if show_leaderboard:
                 draw_leaderboard_overlay(screen, leaderboard, font, big_font)
 
+            draw_fullscreen_button(screen, font, fullscreen)
             pygame.display.flip()
     finally:
         detector.close()
         leaderboard.close()
         cap.release()
+        if pygame.mixer.get_init():
+            pygame.mixer.music.stop()
         pygame.quit()
     return 0
 

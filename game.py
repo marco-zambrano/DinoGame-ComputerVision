@@ -327,7 +327,16 @@ class Game:
             self._draw_game_over(surface)
 
     def _spawn_obstacle(self):
-        kind = random.choices(["cactus", "computer", "bird_low", "bird_high"], weights=[0.34, 0.28, 0.25, 0.13])[0]
+        if self.score < 60:
+            kinds = ["cactus", "computer"]
+            weights = [0.58, 0.42]
+        elif self.score < 140:
+            kinds = ["cactus", "computer", "bird_low"]
+            weights = [0.42, 0.35, 0.23]
+        else:
+            kinds = ["cactus", "computer", "bird_low", "bird_high"]
+            weights = [0.34, 0.30, 0.24, 0.12]
+        kind = random.choices(kinds, weights=weights)[0]
         if kind == "cactus":
             w = random.choice([38, 52, 66])
             h = random.choice([60, 76, 90])
@@ -539,7 +548,7 @@ class Game:
         accent = config.CIRCUIT_GREEN if self.record_break else config.CIRCUIT_MAGENTA
         title = self.big_font.render(title_text, True, config.HUD_TEXT)
         score_text = self.font.render(f"PUNTAJE: {int(self.score)}", True, config.HUD_TEXT)
-        prompt = self.font.render("Salta o presiona ESPACIO para reiniciar", True, config.NEON_CYAN)
+        prompt = self.font.render("ESPACIO mismo nombre  |  N cambiar nombre", True, config.NEON_CYAN)
         panel = pygame.Surface((620, 180), pygame.SRCALPHA)
         pygame.draw.rect(panel, (12, 14, 24, 190), panel.get_rect(), border_radius=6)
         _draw_neon_rect(panel, panel.get_rect().inflate(-4, -4), accent, 2, 6)
@@ -551,7 +560,7 @@ class Game:
     def _draw_victory(self, surface):
         center_x = (config.WINDOW_WIDTH - config.CAMERA_PREVIEW_WIDTH - config.CAMERA_MARGIN * 3) // 2
         title = self.big_font.render("META SUPERADA", True, config.HUD_TEXT)
-        prompt = self.font.render("Salta o presiona ESPACIO para jugar otra vez", True, config.NEON_CYAN)
+        prompt = self.font.render("ESPACIO mismo nombre  |  N cambiar nombre", True, config.NEON_CYAN)
         panel = pygame.Surface((680, 150), pygame.SRCALPHA)
         pygame.draw.rect(panel, (8, 18, 18, 170), panel.get_rect(), border_radius=6)
         _draw_neon_rect(panel, panel.get_rect().inflate(-4, -4), config.CIRCUIT_GREEN, 2, 6)
